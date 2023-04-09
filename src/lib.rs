@@ -59,7 +59,15 @@ pub fn normalize_dice_roll(dice_roll: &str) -> Result<String, String> {
 
                 // 3.3. add the next character (which should be sides of the dice)
                 if let Some(dice) = iter.next() {
-                    normalized_roll.push(dice.to_ascii_lowercase());
+                    if dice.is_ascii_digit() {
+                        if dice == '0' {
+                            return Err(format!("Invalid dice type: {}", dice_roll));
+                        } else {
+                            normalized_roll.push(dice);
+                        }
+                    } else {
+                        return Err(format!("Invalid dice type: {}", dice_roll));
+                    }
 
                     // 3.4. If character after that is a "+" or "-" also add it
                     match iter.peek() {
@@ -102,7 +110,7 @@ mod tests {
             String::from("1d20+2d4-1d6")
         );
         // Test case with no modifiers
-        assert_eq!(normalize_dice_roll("2d10")?, String::from("2d10"));
+        assert_eq!(normalize_dice_roll("2d10-")?, String::from("2d10"));
         // Test case with whitespace characters
         assert_eq!(
             normalize_dice_roll("2d 6 + 3 - 1")?,
@@ -112,17 +120,19 @@ mod tests {
         assert_eq!(normalize_dice_roll("1d8-2-3")?, String::from("1d8-2-3"));
         // Test case with only positive modifiers
         assert_eq!(normalize_dice_roll("1d8+2+3")?, String::from("1d8+2+3"));
-        
 
         // Test case with invalid input
         let err = normalize_dice_roll("not a valid dice roll").unwrap_err();
         assert_eq!(err, "Invalid input: not a valid dice roll");
         // Test case with no sides on the dice
-        // assert_eq!(normalize_dice_roll("1d+4"), String::from("1d4"));
+        let err = normalize_dice_roll("1d+4").unwrap_err();
+        assert_eq!(err, "Invalid dice type: 1d+4");
         // Test case with zero-sided dice
-        // assert_eq!(normalize_dice_roll("1d0"), String::from("1d1"));
-        // Test case with negative dice count
-        // assert_eq!(normalize_dice_roll("-2d6+1d4"), String::from("-2d6+1d4"));
+        let err = normalize_dice_roll("1d0").unwrap_err();
+        assert_eq!(err, "Invalid dice type: 1d0");
+        // Test case with invalid character
+        let err = normalize_dice_roll("2d6$+3").unwrap_err();
+        assert_eq!(err, String::from("Invalid input: 2d6$+3"));
 
         Ok(())
     }
