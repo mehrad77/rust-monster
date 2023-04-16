@@ -173,7 +173,7 @@ fn split_dice_roll(input: &str) -> Vec<String> {
 }
 
 /// Parses a vector of dice roll entries and returns a vector of `DiceEntity` structs.
-fn parse_dice_roll(rolls: Vec<&str>) -> Vec<DiceEntity> {
+fn parse_dice_roll(rolls: Vec<String>) -> Vec<DiceEntity> {
     // 1. initiate the output vector
     let mut output = vec![];
 
@@ -232,7 +232,6 @@ fn parse_dice_roll(rolls: Vec<&str>) -> Vec<DiceEntity> {
             is_constant,
             value,
         };
-        println!("==[]==> roll: {}, entity: {:?}", roll, entity);
         output.push(entity);
     }
 
@@ -280,14 +279,6 @@ fn calculate_dice_entities(entities: Vec<DiceEntity>) -> DiceRollResponse {
                 _ => (),
             }
         }
-
-        println!("=======");
-        println!("{:?}", entity);
-        println!(
-            "r: {}, min: {}, max: {}",
-            result, minimum_result, maximum_result,
-        );
-        println!("=======");
     }
 
     DiceRollResponse {
@@ -295,6 +286,12 @@ fn calculate_dice_entities(entities: Vec<DiceEntity>) -> DiceRollResponse {
         minimum_result,
         maximum_result,
     }
+}
+
+pub fn roll_dice(input: &str) -> DiceRollResponse {
+    let normalized = normalize_dice_roll(input).unwrap();
+    let splitted = split_dice_roll(&normalized);
+    calculate_dice_entities(parse_dice_roll(splitted))
 }
 
 #[cfg(test)]
@@ -363,7 +360,7 @@ mod tests {
     #[test]
     fn test_parse_dice_roll() {
         assert_eq!(
-            parse_dice_roll(vec!["+1d6"]),
+            parse_dice_roll(vec!["+1d6".to_string()]),
             vec![DiceEntity {
                 count: 1,
                 sides: 6,
@@ -374,7 +371,7 @@ mod tests {
         );
 
         assert_eq!(
-            parse_dice_roll(vec!["-1d4"]),
+            parse_dice_roll(vec!["-1d4".to_string()]),
             vec![DiceEntity {
                 count: 1,
                 sides: 4,
@@ -385,7 +382,7 @@ mod tests {
         );
 
         assert_eq!(
-            parse_dice_roll(vec!["+2d8", "-3"]),
+            parse_dice_roll(vec!["+2d8".to_string(), "-3".to_string()]),
             vec![
                 DiceEntity {
                     count: 2,
@@ -405,7 +402,11 @@ mod tests {
         );
 
         assert_eq!(
-            parse_dice_roll(vec!["+2", "+1d20", "-1d4"]),
+            parse_dice_roll(vec![
+                "+2".to_string(),
+                "+1d20".to_string(),
+                "-1d4".to_string()
+            ]),
             vec![
                 DiceEntity {
                     count: 0,
@@ -432,7 +433,14 @@ mod tests {
         );
 
         assert_eq!(
-            parse_dice_roll(vec!["+1d20", "+2", "+3", "+1d6", "+1d6", "-2"]),
+            parse_dice_roll(vec![
+                "+1d20".to_string(),
+                "+2".to_string(),
+                "+3".to_string(),
+                "+1d6".to_string(),
+                "+1d6".to_string(),
+                "-2".to_string()
+            ]),
             vec![
                 DiceEntity {
                     count: 1,

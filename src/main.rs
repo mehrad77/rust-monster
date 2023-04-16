@@ -19,13 +19,11 @@ struct Opt {
 fn main() {
     let opt = Opt::from_args();
 
-    let rolled_string = opt.dice.chars().rev().collect::<String>();
-
+    let rolled_string = dicer::roll_dice(&opt.dice);
     if opt.verbose {
-        println!("dice: {}", dicer::normalize_dice_roll(&opt.dice).unwrap());
-        println!("Original string: {}", opt.dice);
-        println!("Rolled string: {}", rolled_string);
+        // println!("dice: {}", dicer::normalize_dice_roll(&opt.dice).unwrap());
+        println!("==>: {:?}", rolled_string);
     } else {
-        println!("{}", rolled_string);
+        println!("result: {:?}", rolled_string.result);
     }
 }
