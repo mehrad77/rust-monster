@@ -1,11 +1,44 @@
-// use regex::Regex;
+use rand::Rng;
+
+#[derive(Debug)]
+pub struct DiceEntity {
+    pub count: u32,
+    pub sides: u32,
+    pub sign: char,
+    pub is_constant: bool,
+    pub value: u32,
+}
+impl PartialEq for DiceEntity {
+    fn eq(&self, other: &Self) -> bool {
+        self.count == other.count
+            && self.sides == other.sides
+            && self.sign == other.sign
+            && self.is_constant == other.is_constant
+            && self.value == other.value
+    }
+}
+
+#[derive(Debug)]
+pub struct DiceRollResponse {
+    /// result of the roll
+    pub result: i64,
+    /// minimum value to get from this roll
+    pub minimum_result: i64,
+    /// maximum value to get from this roll
+    pub maximum_result: i64,
+}
+impl PartialEq for DiceRollResponse {
+    fn eq(&self, other: &Self) -> bool {
+        self.minimum_result == other.minimum_result && self.maximum_result == other.maximum_result
+    }
+}
 
 /// Takes a string representing a dice roll in the format of "NdM + X - Y" where
 /// N is the number of dice, M is the number of sides on the dice, and X and Y are
 /// optional modifiers. Normalizes the input string by converting all uppercase
 /// characters to lowercase, removing all whitespace, and ensuring that each
 /// dice roll has an explicit "1" before the "d" if no number is provided.
-pub fn normalize_dice_roll(dice_roll: &str) -> Result<String, String> {
+fn normalize_dice_roll(dice_roll: &str) -> Result<String, String> {
     // 0. Validate the input string to ensure that it matches the expected format
     if !dice_roll
         .chars()
@@ -95,65 +128,56 @@ pub fn normalize_dice_roll(dice_roll: &str) -> Result<String, String> {
     Ok(normalized_roll)
 }
 
-fn split_dice_roll(s: &str) -> Vec<String> {
-    let mut res = vec![];
+/// Splits a string into a vector of dice roll components.
+/// ## Examples
+/// ```
+/// let s = "2d6+3-1d4";
+/// let res = split_dice_roll(s);
+/// assert_eq!(res, vec!["+2d6", "+3", "-1d4"]);
+/// ```
+fn split_dice_roll(input: &str) -> Vec<String> {
+    // 1. initialize the variables
+    let mut output = vec![];
     let mut sign = '+';
-    let mut num = String::new();
+    let mut num_string = String::new();
 
-    for c in s.chars() {
+    // 2. loop the characters of input
+    for c in input.chars() {
         if c.is_digit(10) {
-            num.push(c);
+            // 2.1. if the `c` is a digit, append it to current string
+            num_string.push(c);
         } else if c == 'd' {
-            num.push(c);
+            // 2.2. if the `c` is a dice declaration append it to current
+            // string and skip the loop for the next character
+            num_string.push(c);
             continue;
-            // res.push(format!("{}{}", sign, num));
-            // num = String::new();
         } else if c == '+' || c == '-' {
-            if !num.is_empty() {
-                res.push(format!("{}{}", sign, num));
-                num = String::new();
+            // 2.3. if the `c` is an operator and is the first character of the
+            // current component then it's the sign of the component, but if
+            // it's not the first character, it's end of the current component
+            if !num_string.is_empty() {
+                output.push(format!("{}{}", sign, num_string));
+                num_string = String::new();
             }
             sign = c;
         }
     }
-    if !num.is_empty() {
-        res.push(format!("{}{}", sign, num));
+
+    // 3. after the loop, if any character remains, push a new roll component
+    if !num_string.is_empty() {
+        output.push(format!("{}{}", sign, num_string));
     }
-    res
+
+    // 4. return
+    output
 }
 
-#[derive(Debug)]
-pub struct DiceEntity {
-    pub count: u32,
-    pub sides: u32,
-    pub sign: char,
-    pub is_constant: bool,
-    pub value: u32,
-}
-impl Default for DiceEntity {
-    fn default() -> Self {
-        Self {
-            count: 1,
-            sides: 6,
-            sign: '+',
-            is_constant: false,
-            value: 0,
-        }
-    }
-}
-impl PartialEq for DiceEntity {
-    fn eq(&self, other: &Self) -> bool {
-        self.count == other.count
-            && self.sides == other.sides
-            && self.sign == other.sign
-            && self.is_constant == other.is_constant
-            && self.value == other.value
-    }
-}
-
+/// Parses a vector of dice roll entries and returns a vector of `DiceEntity` structs.
 fn parse_dice_roll(rolls: Vec<&str>) -> Vec<DiceEntity> {
-    let mut res = vec![];
+    // 1. initiate the output vector
+    let mut output = vec![];
 
+    // 2. loop over the input vector
     for roll in rolls {
         let mut count = 0;
         let mut sides = 0;
@@ -161,8 +185,10 @@ fn parse_dice_roll(rolls: Vec<&str>) -> Vec<DiceEntity> {
         let mut is_constant = false;
         let mut value = 0;
 
+        // 3. ...
         let is_dice = roll.contains('d');
         if is_dice {
+            // 3.1. Split the roll into sign, count and sides
             let (sign_str, roll) = roll.split_at(1);
             (count, sides) = match roll.split_once('d') {
                 Some((count_str, sides_str)) => (
@@ -171,32 +197,34 @@ fn parse_dice_roll(rolls: Vec<&str>) -> Vec<DiceEntity> {
                 ),
                 None => panic!("Invalid dice! {}", roll),
             };
+            // 3.2. Convert the sign to char
             sign = sign_str.chars().next().unwrap_or('+');
-            println!(
-                "==[dice]==> sign: {}, count: {}, sides: {}",
-                sign, count, sides
-            );
+            // println!(
+            //     "==[dice]==> sign: {}, count: {}, sides: {}",
+            //     sign, count, sides
+            // );
         } else {
+            // 4. If not a dice, then the roll is a constant value
             is_constant = true;
-
             for c in roll.chars() {
                 if c.is_digit(10) {
-                    println!("====)))) a digit");
-                    // add the digit to the constant value
+                    // 4.1. Add the digit to the constant value
                     value = value * 10 + c.to_digit(10).unwrap();
-                } else if c == 'd' {
-                    println!("WRONG!!! WRONG!!! WRONG!!! a 'd'");
                 } else if c == '+' || c == '-' {
-                    println!("====)))) an operator ({})", c);
+                    // 4.2. Get the sign of the constant value
                     sign = c;
+                } else {
+                    // 4.3. Panic if there's an unknown character in the constant value
+                    panic!("Unknown character: {}", c)
                 }
             }
-            println!(
-                "==[constant]==> is_constant: {}, sign: {}, value: {}",
-                is_constant, sign, value
-            );
+            // println!(
+            //     "==[constant]==> is_constant: {}, sign: {}, value: {}",
+            //     is_constant, sign, value
+            // );
         }
 
+        // 5. Add a new DiceEntity to the result vector with the current values
         let entity = DiceEntity {
             count,
             sides,
@@ -205,10 +233,68 @@ fn parse_dice_roll(rolls: Vec<&str>) -> Vec<DiceEntity> {
             value,
         };
         println!("==[]==> roll: {}, entity: {:?}", roll, entity);
-        // Add a new DiceEntity to the result vector with the current values
-        res.push(entity);
+        output.push(entity);
     }
-    res
+
+    // 6. return the output
+    output
+}
+
+fn calculate_dice_entities(entities: Vec<DiceEntity>) -> DiceRollResponse {
+    let mut result = 0;
+    let mut minimum_result = 0;
+    let mut maximum_result = 0;
+
+    for entity in entities {
+        if entity.is_constant {
+            match entity.sign {
+                '+' => {
+                    result += entity.value as i64;
+                    minimum_result += entity.value as i64;
+                    maximum_result += entity.value as i64;
+                }
+                '-' => {
+                    result -= entity.value as i64;
+                    minimum_result -= entity.value as i64;
+                    maximum_result -= entity.value as i64;
+                }
+                _ => (),
+            }
+        } else {
+            let mut rng = rand::thread_rng();
+            let mut sum = 0;
+            for _ in 0..entity.count {
+                sum += rng.gen_range(1, entity.sides + 1);
+            }
+            match entity.sign {
+                '+' => {
+                    result += sum as i64;
+                    minimum_result += entity.count as i64 * 1;
+                    maximum_result += entity.count as i64 * entity.sides as i64;
+                }
+                '-' => {
+                    result -= sum as i64;
+                    minimum_result -= entity.count as i64 * entity.sides as i64;
+                    maximum_result -= entity.count as i64 * 1;
+                }
+                _ => (),
+            }
+        }
+
+        println!("=======");
+        println!("{:?}", entity);
+        println!(
+            "r: {}, min: {}, max: {}",
+            result, minimum_result, maximum_result,
+        );
+        println!("=======");
+    }
+
+    DiceRollResponse {
+        result,
+        minimum_result,
+        maximum_result,
+    }
 }
 
 #[cfg(test)]
@@ -391,6 +477,107 @@ mod tests {
                     value: 2,
                 },
             ]
+        );
+    }
+
+    #[test]
+    fn test_calculate_dice_entities() {
+        assert_eq!(
+            calculate_dice_entities(vec![DiceEntity {
+                count: 1,
+                sides: 6,
+                sign: '+',
+                is_constant: false,
+                value: 0,
+            }]),
+            DiceRollResponse {
+                // this is RNG and different each time, but doesn't matter in test
+                result: 0,
+                minimum_result: 1,
+                maximum_result: 6,
+            }
+        );
+
+        assert_eq!(
+            calculate_dice_entities(vec![
+                DiceEntity {
+                    count: 1,
+                    sides: 6,
+                    sign: '+',
+                    is_constant: false,
+                    value: 0,
+                },
+                DiceEntity {
+                    count: 1,
+                    sides: 6,
+                    sign: '+',
+                    is_constant: false,
+                    value: 0,
+                }
+            ]),
+            DiceRollResponse {
+                // this is RNG and different each time, but doesn't matter in test
+                result: 0,
+                minimum_result: 2,
+                maximum_result: 12,
+            }
+        );
+
+        assert_eq!(
+            calculate_dice_entities(vec![
+                DiceEntity {
+                    count: 1,
+                    sides: 6,
+                    sign: '+',
+                    is_constant: false,
+                    value: 0,
+                },
+                DiceEntity {
+                    count: 1,
+                    sides: 6,
+                    sign: '-',
+                    is_constant: false,
+                    value: 0,
+                }
+            ]),
+            DiceRollResponse {
+                // this is RNG and different each time, but doesn't matter in test
+                result: 0,
+                minimum_result: -5,
+                maximum_result: 5,
+            }
+        );
+
+        assert_eq!(
+            calculate_dice_entities(vec![
+                DiceEntity {
+                    count: 1,
+                    sides: 20,
+                    sign: '+',
+                    is_constant: false,
+                    value: 0,
+                },
+                DiceEntity {
+                    count: 0,
+                    sides: 0,
+                    sign: '+',
+                    is_constant: true,
+                    value: 5,
+                },
+                DiceEntity {
+                    count: 0,
+                    sides: 0,
+                    sign: '-',
+                    is_constant: true,
+                    value: 2,
+                },
+            ]),
+            DiceRollResponse {
+                // this is RNG and different each time, but doesn't matter in test
+                result: 0,
+                minimum_result: 4,
+                maximum_result: 23
+            }
         );
     }
 }
