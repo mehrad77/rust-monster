@@ -1,3 +1,5 @@
+// use regex::Regex;
+
 /// Takes a string representing a dice roll in the format of "NdM + X - Y" where
 /// N is the number of dice, M is the number of sides on the dice, and X and Y are
 /// optional modifiers. Normalizes the input string by converting all uppercase
@@ -46,10 +48,10 @@ pub fn normalize_dice_roll(dice_roll: &str) -> Result<String, String> {
             // 3.1. If `c` is a dice declaration (`d/D`)
             if c.to_ascii_lowercase() == 'd' {
                 // 3.2. If there is no digit before the 'd' to indicate the count, add '1' as default
-                if (normalized_roll
+                if normalized_roll
                     .chars()
                     .last()
-                    .map_or(true, |prev| !prev.is_ascii_digit()))
+                    .map_or(true, |prev| !prev.is_ascii_digit())
                 {
                     normalized_roll.push('1');
                 }
@@ -91,6 +93,78 @@ pub fn normalize_dice_roll(dice_roll: &str) -> Result<String, String> {
         .to_lowercase();
 
     Ok(normalized_roll)
+}
+
+#[derive(Debug)]
+pub struct DiceEntity {
+    pub count: u32,
+    pub sides: u32,
+    pub sign: char,
+    pub is_constant: bool,
+    pub value: i32,
+}
+
+impl PartialEq for DiceEntity {
+    fn eq(&self, other: &Self) -> bool {
+        self.count == other.count
+            && self.sides == other.sides
+            && self.sign == other.sign
+            && self.is_constant == other.is_constant
+            && self.value == other.value
+    }
+}
+
+fn parse_dice_roll(dice_roll: &str) -> Vec<DiceEntity> {
+    // Split the input string by the plus and minus signs to separate the different dice entities.
+    let tokens: Vec<&str> = dice_roll.split(|c| c == '+' || c == '-').collect();
+
+    // Filter out any empty tokens.
+    let tokens: Vec<&str> = tokens
+        .iter()
+        .filter(|t| !t.is_empty())
+        .map(|t| t.trim())
+        .collect();
+
+    // Collect the signs into a vector.
+    let signs: Vec<char> = dice_roll
+        .chars()
+        .filter(|c| *c == '+' || *c == '-')
+        .collect();
+
+    // Create an iterator over the tokens and signs.
+    let mut it_tokens = tokens.iter();
+    let mut it_signs = signs.iter();
+
+    // Create an empty vector to store the dice entities.
+    let mut dice_entities = Vec::new();
+
+    // Iterate over the tokens and signs to create the dice entities.
+    while let Some(token) = it_tokens.next() {
+        let sign = *it_signs.next().unwrap_or(&'+');
+        let (count, sides) = if let Some(pos) = token.find('d') {
+            let count_str = &token[..pos];
+            let sides_str = &token[pos + 1..];
+            (count_str.parse().unwrap_or(1), sides_str.parse().unwrap())
+        } else {
+            (0, 0)
+        };
+        let is_constant = sides == 0;
+        let value = if is_constant {
+            token.parse().unwrap()
+        } else {
+            0
+        };
+        dice_entities.push(DiceEntity {
+            count,
+            sides,
+            sign,
+            is_constant,
+            value,
+        });
+    }
+
+    // Return the vector of dice entities.
+    dice_entities
 }
 
 #[cfg(test)]
@@ -135,5 +209,115 @@ mod tests {
         assert_eq!(err, String::from("Invalid input: 2d6$+3"));
 
         Ok(())
+    }
+
+    #[test]
+    // #[ignore]
+    fn test_parse_dice_roll() {
+        assert_eq!(
+            parse_dice_roll("1d6"),
+            vec![DiceEntity {
+                count: 1,
+                sides: 6,
+                sign: '+',
+                is_constant: false,
+                value: 0,
+            }]
+        );
+
+        assert_eq!(
+            parse_dice_roll("2d8-3"),
+            vec![
+                DiceEntity {
+                    count: 2,
+                    sides: 8,
+                    sign: '+',
+                    is_constant: false,
+                    value: 0,
+                },
+                DiceEntity {
+                    count: 0,
+                    sides: 0,
+                    sign: '-',
+                    is_constant: true,
+                    value: 3,
+                },
+            ]
+        );
+
+        assert_eq!(
+            parse_dice_roll("2+1d20-1d4"),
+            vec![
+                DiceEntity {
+                    count: 0,
+                    sides: 0,
+                    sign: '+',
+                    is_constant: true,
+                    value: 2,
+                },
+                DiceEntity {
+                    count: 1,
+                    sides: 20,
+                    sign: '+',
+                    is_constant: false,
+                    value: 0,
+                },
+                DiceEntity {
+                    count: 1,
+                    sides: 4,
+                    sign: '-',
+                    is_constant: false,
+                    value: 0,
+                },
+            ]
+        );
+
+        assert_eq!(
+            parse_dice_roll("1d20+2+3+1d6+1d6-2"),
+            vec![
+                DiceEntity {
+                    count: 1,
+                    sides: 20,
+                    sign: '+',
+                    is_constant: false,
+                    value: 0,
+                },
+                DiceEntity {
+                    count: 1,
+                    sides: 0,
+                    sign: '+',
+                    is_constant: true,
+                    value: 2,
+                },
+                DiceEntity {
+                    count: 1,
+                    sides: 0,
+                    sign: '+',
+                    is_constant: true,
+                    value: 3,
+                },
+                DiceEntity {
+                    count: 1,
+                    sides: 6,
+                    sign: '+',
+                    is_constant: false,
+                    value: 0,
+                },
+                DiceEntity {
+                    count: 1,
+                    sides: 6,
+                    sign: '+',
+                    is_constant: false,
+                    value: 0,
+                },
+                DiceEntity {
+                    count: 1,
+                    sides: 0,
+                    sign: '-',
+                    is_constant: true,
+                    value: 2,
+                },
+            ]
+        );
     }
 }
