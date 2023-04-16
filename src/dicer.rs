@@ -95,15 +95,52 @@ pub fn normalize_dice_roll(dice_roll: &str) -> Result<String, String> {
     Ok(normalized_roll)
 }
 
+fn split_dice_roll(s: &str) -> Vec<String> {
+    let mut res = vec![];
+    let mut sign = '+';
+    let mut num = String::new();
+
+    for c in s.chars() {
+        if c.is_digit(10) {
+            num.push(c);
+        } else if c == 'd' {
+            num.push(c);
+            continue;
+            // res.push(format!("{}{}", sign, num));
+            // num = String::new();
+        } else if c == '+' || c == '-' {
+            if !num.is_empty() {
+                res.push(format!("{}{}", sign, num));
+                num = String::new();
+            }
+            sign = c;
+        }
+    }
+    if !num.is_empty() {
+        res.push(format!("{}{}", sign, num));
+    }
+    res
+}
+
 #[derive(Debug)]
 pub struct DiceEntity {
     pub count: u32,
     pub sides: u32,
     pub sign: char,
     pub is_constant: bool,
-    pub value: i32,
+    pub value: u32,
 }
-
+impl Default for DiceEntity {
+    fn default() -> Self {
+        Self {
+            count: 1,
+            sides: 6,
+            sign: '+',
+            is_constant: false,
+            value: 0,
+        }
+    }
+}
 impl PartialEq for DiceEntity {
     fn eq(&self, other: &Self) -> bool {
         self.count == other.count
@@ -114,57 +151,64 @@ impl PartialEq for DiceEntity {
     }
 }
 
-fn parse_dice_roll(dice_roll: &str) -> Vec<DiceEntity> {
-    // Split the input string by the plus and minus signs to separate the different dice entities.
-    let tokens: Vec<&str> = dice_roll.split(|c| c == '+' || c == '-').collect();
+fn parse_dice_roll(rolls: Vec<&str>) -> Vec<DiceEntity> {
+    let mut res = vec![];
 
-    // Filter out any empty tokens.
-    let tokens: Vec<&str> = tokens
-        .iter()
-        .filter(|t| !t.is_empty())
-        .map(|t| t.trim())
-        .collect();
+    for roll in rolls {
+        let mut count = 0;
+        let mut sides = 0;
+        let mut sign = '+';
+        let mut is_constant = false;
+        let mut value = 0;
 
-    // Collect the signs into a vector.
-    let signs: Vec<char> = dice_roll
-        .chars()
-        .filter(|c| *c == '+' || *c == '-')
-        .collect();
-
-    // Create an iterator over the tokens and signs.
-    let mut it_tokens = tokens.iter();
-    let mut it_signs = signs.iter();
-
-    // Create an empty vector to store the dice entities.
-    let mut dice_entities = Vec::new();
-
-    // Iterate over the tokens and signs to create the dice entities.
-    while let Some(token) = it_tokens.next() {
-        let sign = *it_signs.next().unwrap_or(&'+');
-        let (count, sides) = if let Some(pos) = token.find('d') {
-            let count_str = &token[..pos];
-            let sides_str = &token[pos + 1..];
-            (count_str.parse().unwrap_or(1), sides_str.parse().unwrap())
+        let is_dice = roll.contains('d');
+        if is_dice {
+            let (sign_str, roll) = roll.split_at(1);
+            (count, sides) = match roll.split_once('d') {
+                Some((count_str, sides_str)) => (
+                    count_str.parse::<u32>().unwrap(),
+                    sides_str.parse::<u32>().unwrap(),
+                ),
+                None => panic!("Invalid dice! {}", roll),
+            };
+            sign = sign_str.chars().next().unwrap_or('+');
+            println!(
+                "==[dice]==> sign: {}, count: {}, sides: {}",
+                sign, count, sides
+            );
         } else {
-            (0, 0)
-        };
-        let is_constant = sides == 0;
-        let value = if is_constant {
-            token.parse().unwrap()
-        } else {
-            0
-        };
-        dice_entities.push(DiceEntity {
+            is_constant = true;
+
+            for c in roll.chars() {
+                if c.is_digit(10) {
+                    println!("====)))) a digit");
+                    // add the digit to the constant value
+                    value = value * 10 + c.to_digit(10).unwrap();
+                } else if c == 'd' {
+                    println!("WRONG!!! WRONG!!! WRONG!!! a 'd'");
+                } else if c == '+' || c == '-' {
+                    println!("====)))) an operator ({})", c);
+                    sign = c;
+                }
+            }
+            println!(
+                "==[constant]==> is_constant: {}, sign: {}, value: {}",
+                is_constant, sign, value
+            );
+        }
+
+        let entity = DiceEntity {
             count,
             sides,
             sign,
             is_constant,
             value,
-        });
+        };
+        println!("==[]==> roll: {}, entity: {:?}", roll, entity);
+        // Add a new DiceEntity to the result vector with the current values
+        res.push(entity);
     }
-
-    // Return the vector of dice entities.
-    dice_entities
+    res
 }
 
 #[cfg(test)]
@@ -212,10 +256,28 @@ mod tests {
     }
 
     #[test]
-    // #[ignore]
+    fn test_split_dice_roll() {
+        assert_eq!(split_dice_roll("1d6"), vec!["+1d6"]);
+
+        assert_eq!(split_dice_roll("2d8-3"), vec!["+2d8", "-3"]);
+
+        assert_eq!(split_dice_roll("2+1d20-1d4"), vec!["+2", "+1d20", "-1d4"]);
+
+        assert_eq!(
+            split_dice_roll("1d20+2+3+1d6+1d6-2"),
+            vec!["+1d20", "+2", "+3", "+1d6", "+1d6", "-2",]
+        );
+
+        assert_eq!(
+            split_dice_roll("-1+2+3-4-5+6-7"),
+            vec!["-1", "+2", "+3", "-4", "-5", "+6", "-7"]
+        );
+    }
+
+    #[test]
     fn test_parse_dice_roll() {
         assert_eq!(
-            parse_dice_roll("1d6"),
+            parse_dice_roll(vec!["+1d6"]),
             vec![DiceEntity {
                 count: 1,
                 sides: 6,
@@ -226,7 +288,18 @@ mod tests {
         );
 
         assert_eq!(
-            parse_dice_roll("2d8-3"),
+            parse_dice_roll(vec!["-1d4"]),
+            vec![DiceEntity {
+                count: 1,
+                sides: 4,
+                sign: '-',
+                is_constant: false,
+                value: 0,
+            }]
+        );
+
+        assert_eq!(
+            parse_dice_roll(vec!["+2d8", "-3"]),
             vec![
                 DiceEntity {
                     count: 2,
@@ -246,7 +319,7 @@ mod tests {
         );
 
         assert_eq!(
-            parse_dice_roll("2+1d20-1d4"),
+            parse_dice_roll(vec!["+2", "+1d20", "-1d4"]),
             vec![
                 DiceEntity {
                     count: 0,
@@ -273,7 +346,7 @@ mod tests {
         );
 
         assert_eq!(
-            parse_dice_roll("1d20+2+3+1d6+1d6-2"),
+            parse_dice_roll(vec!["+1d20", "+2", "+3", "+1d6", "+1d6", "-2"]),
             vec![
                 DiceEntity {
                     count: 1,
@@ -283,14 +356,14 @@ mod tests {
                     value: 0,
                 },
                 DiceEntity {
-                    count: 1,
+                    count: 0,
                     sides: 0,
                     sign: '+',
                     is_constant: true,
                     value: 2,
                 },
                 DiceEntity {
-                    count: 1,
+                    count: 0,
                     sides: 0,
                     sign: '+',
                     is_constant: true,
@@ -311,7 +384,7 @@ mod tests {
                     value: 0,
                 },
                 DiceEntity {
-                    count: 1,
+                    count: 0,
                     sides: 0,
                     sign: '-',
                     is_constant: true,
