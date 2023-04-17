@@ -3,7 +3,7 @@ mod utilities;
 use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
-#[structopt(name = "Roll Dice", about = "Drop a string and roll the dice")]
+#[structopt(name = "RustMonster", about = "A few tools for your TTRPG")]
 struct Opt {
     #[structopt(
         short = "d",
@@ -18,7 +18,6 @@ struct Opt {
 
 fn main() {
     let opt = Opt::from_args();
-
     let rolled_string = dicer::roll_dice(&opt.dice);
     if opt.verbose {
         // println!("dice: {}", dicer::normalize_dice_roll(&opt.dice).unwrap());
